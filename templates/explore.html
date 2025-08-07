@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Explore Projects - CodeCollaborationHub{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1 class="mb-3">Explore Public Projects</h1>
+        <p class="lead">Discover public projects from the CodeCollaborationHub community.</p>
+    </div>
+</div>
+
+<div class="row">
+    {% if projects %}
+        {% for project in projects %}
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <a href="{{ url_for('main.view_project', project_id=project.id) }}" class="text-decoration-none">
+                            {{ project.title }}
+                        </a>
+                    </h5>
+                    <h6 class="card-subtitle mb-2 text-muted">by {{ project.owner.username }}</h6>
+                    <p class="card-text">{{ project.description|truncate(150) }}</p>
+                    <div class="mb-2">
+                        <span class="badge bg-info">{{ project.language }}</span>
+                        <span class="badge bg-secondary">{{ project.collaborator_count }} collaborators</span>
+                    </div>
+                    <p class="card-text"><small class="text-muted">Last updated {{ project.updated_at.strftime('%Y-%m-%d') }}</small></p>
+                </div>
+                <div class="card-footer bg-transparent border-0">
+                    <a href="{{ url_for('main.view_project', project_id=project.id) }}" class="btn btn-sm btn-outline-primary">
+                        View Project
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="col">
+        <div class="alert alert-info">
+            No public projects available at the moment.
+            {% if current_user.is_authenticated %}
+            <a href="{{ url_for('main.new_project') }}">Create a new project</a> and make it public to share with the community.
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %} 

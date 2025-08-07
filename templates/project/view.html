@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.title }} - CodeCollaborationHub{% endblock %}
+
+{% block extra_css %}
+<style>
+    {{ css }}
+
+    .source {
+        margin-bottom: 20px;
+    }
+    
+    #collaborators-box {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1 class="mb-2">{{ project.title }}</h1>
+            <div>
+                {% if current_user.is_authenticated and (project.owner_id == current_user.id or current_user.id in project.collaborators) %}
+                <a href="{{ url_for('main.edit_project', project_id=project.id) }}" class="btn btn-primary">
+                    <i class="fas fa-edit"></i> Edit
+                </a>
+                {% endif %}
+                <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left"></i> Back
+                </a>
+            </div>
+        </div>
+        <div class="mb-3">
+            <span class="badge bg-info">{{ project.language }}</span>
+            {% if project.is_public %}
+            <span class="badge bg-success">Public</span>
+            {% else %}
+            <span class="badge bg-secondary">Private</span>
+            {% endif %}
+        </div>
+        <p class="text-muted">
+            Created by <strong>{{ owner.username }}</strong> on {{ project.created_at.strftime('%Y-%m-%d') }}
+            {% if project.created_at != project.updated_at %}
+            | Last updated: {{ project.updated_at.strftime('%Y-%m-%d %H:%M') }}
+            {% endif %}
+        </p>
+        {% if project.description %}
+        <p>{{ project.description }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <!-- Code Display Column -->
+    <div class="col-md-9">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">Code</h4>
+                {% if current_user.is_authenticated and (project.owner_id == current_user.id or current_user.id in project.collaborators) %}
+                <button class="btn btn-sm btn-outline-primary" id="edit-button">
+                    <i class="fas fa-pencil-alt"></i> Switch to Editor
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body p-0">
+                <div id="code-viewer" class="p-3">
+                    {{ highlighted_code|safe }}
+                </div>
+                
+                <div id="code-editor" class="p-3 d-none">
+                    <textarea id="editor" class="form-control code-editor" rows="20">{{ project.content }}</textarea>
+                    <div class="mt-3">
+                        <button id="save-button" class="btn btn-success">
+                            <i class="fas fa-save"></i> Save
+                        </button>
+                        <button id="cancel-button" class="btn btn-outline-secondary">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="col-md-3">
+        <!-- Collaborators Section -->
+        {% if current_user.is_authenticated and project.owner_id == current_user.id %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Collaborators</h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('main.add_collaborator', project_id=project.id) }}" method="POST" class="mb-3">
+                    <div class="mb-2">
+                        <label for="username" class="form-label">Add Collaborator</label>
+                        <input type="text" class="form-control form-control-sm" id="username" name="username" placeholder="Username" required>
+                    </div>
+                    <div class="mb-2">
+                        <label for="permission" class="form-label">Permission</label>
+                        <select class="form-select form-select-sm" id="permission" name="permission">
+                            <option value="read">Read</option>
+                            <option value="write">Write</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-plus"></i> Add
+                    </button>
+                </form>
+                
+                <hr>
+                
+                <div id="collaborators-box">
+                    {% if collaborators %}
+                    <ul class="list-group">
+                        {% for collaborator in collaborators %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <span>{{ collaborator.username }}</span>
+                                <span class="badge bg-info">{{ collaborator.permission }}</span>
+                            </div>
+                            <form action="{{ url_for('main.remove_collaborator', project_id=project.id, user_id=collaborator.user_id) }}" method="POST" class="d-inline">
+                                <button type="submit" class="btn btn-sm btn-danger">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </form>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="text-muted">No collaborators yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Active Users Section -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Active Users</h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group" id="active-users">
+                    {% if current_user.is_authenticated %}
+                    <li class="list-group-item">
+                        <i class="fas fa-circle text-success"></i> You ({{ current_user.username }})
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if current_user.is_authenticated %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const socket = io();
+        const projectId = {{ project.id }};
+        const userId = {{ current_user.id }};
+        const username = "{{ current_user.username }}";
+        
+        // Join the project's room
+        socket.emit('join', { project_id: projectId });
+        
+        // Handle when other users join
+        socket.on('user_joined', function(data) {
+            const userItem = document.createElement('li');
+            userItem.className = 'list-group-item';
+            userItem.id = `user-${data.user_id}`;
+            userItem.innerHTML = `<i class="fas fa-circle text-success"></i> ${data.username}`;
+            document.getElementById('active-users').appendChild(userItem);
+        });
+        
+        // Handle when users leave
+        socket.on('user_left', function(data) {
+            const userElement = document.getElementById(`user-${data.user_id}`);
+            if (userElement) {
+                userElement.remove();
+            }
+        });
+        
+        // Handle code updates from other users
+        socket.on('code_updated', function(data) {
+            const editor = document.getElementById('editor');
+            if (editor) {
+                editor.value = data.content;
+            }
+            
+            // Show notification
+            const notification = document.createElement('div');
+            notification.className = 'alert alert-info alert-dismissible fade show';
+            notification.role = 'alert';
+            notification.innerHTML = `
+                Code updated by ${data.updated_by}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            document.querySelector('.flash-messages').appendChild(notification);
+            
+            // Auto dismiss after 3 seconds
+            setTimeout(function() {
+                const bsAlert = new bootstrap.Alert(notification);
+                bsAlert.close();
+            }, 3000);
+        });
+        
+        // Editor functionality
+        const codeViewer = document.getElementById('code-viewer');
+        const codeEditor = document.getElementById('code-editor');
+        const editButton = document.getElementById('edit-button');
+        const saveButton = document.getElementById('save-button');
+        const cancelButton = document.getElementById('cancel-button');
+        const editor = document.getElementById('editor');
+        
+        if (editButton) {
+            editButton.addEventListener('click', function() {
+                codeViewer.classList.add('d-none');
+                codeEditor.classList.remove('d-none');
+                editButton.classList.add('d-none');
+            });
+        }
+        
+        if (saveButton) {
+            saveButton.addEventListener('click', function() {
+                const content = editor.value;
+                
+                // Send code update to server
+                socket.emit('code_update', {
+                    project_id: projectId,
+                    content: content
+                });
+                
+                // Show saving notification
+                const notification = document.createElement('div');
+                notification.className = 'alert alert-success alert-dismissible fade show';
+                notification.role = 'alert';
+                notification.innerHTML = `
+                    Code saved successfully!
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                `;
+                document.querySelector('.flash-messages').appendChild(notification);
+                
+                // Auto dismiss after 3 seconds
+                setTimeout(function() {
+                    const bsAlert = new bootstrap.Alert(notification);
+                    bsAlert.close();
+                }, 3000);
+                
+                // Reload the page to show updated code with syntax highlighting
+                setTimeout(function() {
+                    window.location.reload();
+                }, 1000);
+            });
+        }
+        
+        if (cancelButton) {
+            cancelButton.addEventListener('click', function() {
+                codeEditor.classList.add('d-none');
+                codeViewer.classList.remove('d-none');
+                editButton.classList.remove('d-none');
+            });
+        }
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            socket.emit('leave', { project_id: projectId });
+        });
+    });
+</script>
+{% endif %}
+{% endblock %} 

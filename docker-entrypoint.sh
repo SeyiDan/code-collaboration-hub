@@ -3,11 +3,14 @@ set -e
 
 # Wait for PostgreSQL to be ready
 echo "Waiting for PostgreSQL to be ready..."
-until PGPASSWORD=postgres psql -h db -U postgres -d codecollaboration -c "SELECT 1" > /dev/null 2>&1; do
-    echo "PostgreSQL is unavailable - sleeping"
+for i in {1..30}; do
+    if nc -z db 5432 2>/dev/null; then
+        echo "PostgreSQL is ready!"
+        break
+    fi
+    echo "PostgreSQL is unavailable - sleeping ($i/30)"
     sleep 2
 done
-echo "PostgreSQL is ready!"
 
 # Wait for Redis to be ready
 echo "Waiting for Redis to be ready..."

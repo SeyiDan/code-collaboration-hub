@@ -228,23 +228,3 @@ python -m pytest tests/test_socketio.py  # Real-time feature tests
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 📞 Contact & Support
-
-**Oladejo Seyi**  
-📧 **Email**: oladejo.seyi2@gmail.com  
-🔗 **LinkedIn**: [Your LinkedIn Profile](#)  
-🐙 **GitHub**: [Your GitHub Profile](#)
-
-### 🆘 Support
-- 📖 **Documentation**: [Wiki Documentation](#)
-- 🐛 **Bug Reports**: [Issue Tracker](#)
-- 💬 **Community**: [Discord Server](#)
-- 📧 **Email Support**: support@codecollabhub.com
-
----
-
-### 🌟 Show Your Support
-⭐ **Star this repository** if you find it useful!  
-🍴 **Fork it** to contribute or customize!  
-📢 **Share it** with your developer network!  
-💝 **Sponsor** the project to help it grow! 

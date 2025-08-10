@@ -8,17 +8,6 @@
 
 A powerful real-time code collaboration platform that enables developers to work together seamlessly on coding projects, featuring live code editing, instant messaging, and project management tools.
 
-## 📸 Screenshots
-
-![Real-time Collaboration](screenshots/collaboration.png)
-*Multiple developers editing code simultaneously with live cursors*
-
-![Project Dashboard](screenshots/dashboard.png)
-*Project management interface with team overview*
-
-## 🚀 Live Demo
-
-[View Live Demo](#) | [Video Walkthrough](#)
 
 ## Features
 

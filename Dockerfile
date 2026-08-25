@@ -2,11 +2,15 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including PostgreSQL development libraries
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     python3-dev \
     curl \
+    libpq-dev \
+    build-essential \
+    netcat-openbsd \
+    redis-tools \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

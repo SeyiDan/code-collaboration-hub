@@ -6,9 +6,12 @@
 [![Socket.IO](https://img.shields.io/badge/Socket.IO-Real--time-orange.svg)](https://socket.io/)
 [![Docker](https://img.shields.io/badge/Docker-Supported-blue.svg)](https://www.docker.com/)
 
-A Flask web app where several people can open the same project and edit its code together, with
-each keystroke broadcast over WebSockets and every edit permission-checked on the server before
-it is applied.
+A Flask web app where several people can open the same project and edit its code together.
+Edits are broadcast over WebSockets and permission-checked on the server before they are applied.
+
+**Be clear about the granularity:** a save broadcasts, not a keystroke. Clicking Save emits
+`code_update`; other viewers receive `code_updated` and reload. This is collaborative editing at
+save granularity, not character-by-character like Google Docs.
 
 **12 Flask routes, 6 Socket.IO event handlers, 3 SQLAlchemy models.**
 
@@ -18,8 +21,9 @@ it is applied.
 - **Projects** — create, view, edit, delete, plus a dashboard of your own and an explore page.
 - **Collaborators with permission levels** — a project owner can add and remove collaborators,
   each holding `read`, `write` or `admin`.
-- **Live editing** — `code_update` and `cursor_position` events broadcast to everyone in the
-  project room, so you see other people's edits and where their cursor is.
+- **Shared editing** — `code_update` broadcasts a saved document to everyone in the project room.
+  A `cursor_position` handler exists on the server but **no template emits or listens for it**, so
+  cursor sharing is wired but not reachable from the UI.
 - **Server-side authorization on every edit** — see below. This is the part worth reading.
 - **Syntax highlighting** — server-side via Pygments. The editing surface itself is a plain
   `<textarea>` wired to Socket.IO, not a client-side editor component.
@@ -96,10 +100,14 @@ cd code-collaboration-hub
 python -m venv venv
 source venv/bin/activate        # venv\Scripts\activate on Windows
 pip install -r requirements.txt
-python run.py
+python app.py
 ```
 
-Open http://localhost:5000.
+Open http://localhost:8080.
+
+**Use `app.py`, not `run.py`.** `run.py` calls `app.run()` rather than `socketio.run()`, so it
+starts the server with WebSockets disabled, which is the one feature this project exists for.
+Its own docstring says "without SocketIO".
 
 ### With Docker
 
@@ -134,8 +142,10 @@ least tested. That is the first thing I would add.
 ## 🔒 Security notes
 
 - Passwords are hashed, never stored in plaintext.
-- Sessions are managed by Flask-Login, and every socket handler re-checks
-  `current_user.is_authenticated` rather than trusting the connection.
+- Sessions are managed by Flask-Login. The four handlers that touch project data (`join`, `leave`,
+  `code_update`, `cursor_position`) re-check `current_user.is_authenticated` rather than trusting
+  the connection. `connect` and `disconnect` do not; `connect` replies to any socket with a
+  constant.
 - Edit authorization is enforced server-side, per project, on every `code_update`.
 
 **Not implemented**, and listed here so nobody assumes otherwise: CSRF tokens, rate limiting,

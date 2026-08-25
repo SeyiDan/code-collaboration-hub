@@ -20,7 +20,10 @@ def create_app(test_config=None):
     
     # Configure the app
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev_key_replace_in_production')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URI', 'sqlite:///codecollab.db')
+    # Reads DATABASE_URL, which is what docker-compose.yml and env.example both set.
+    # This looked for DATABASE_URI, which nothing ever defined, so every containerised
+    # run silently fell back to SQLite while the Postgres service sat unused beside it.
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///codecollab.db')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # Initialize extensions with app

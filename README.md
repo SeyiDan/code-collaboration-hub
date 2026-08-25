@@ -6,225 +6,141 @@
 [![Socket.IO](https://img.shields.io/badge/Socket.IO-Real--time-orange.svg)](https://socket.io/)
 [![Docker](https://img.shields.io/badge/Docker-Supported-blue.svg)](https://www.docker.com/)
 
-Real-time code collaboration platform that enables developers to work together seamlessly on coding projects, featuring live code editing, instant messaging, and project management tools.
+A Flask web app where several people can open the same project and edit its code together, with
+each keystroke broadcast over WebSockets and every edit permission-checked on the server before
+it is applied.
 
+**12 Flask routes, 6 Socket.IO event handlers, 3 SQLAlchemy models.**
 
-## Features
+## What it actually does
 
-- **User Authentication**: Register, login, and manage user profiles
-- **Project Management**: Create and manage coding projects
-- **Real-time Collaboration**: Edit code together with multiple users simultaneously
-- **Chat Functionality**: Communicate with team members in real-time
-- **Version Control**: Integration with Git for version control
-- **Code Highlighting**: Syntax highlighting for multiple programming languages
-- **Discussion Forums**: Participate in coding discussions and share knowledge
+- **Accounts and sessions** — register, log in, log out, managed by Flask-Login.
+- **Projects** — create, view, edit, delete, plus a dashboard of your own and an explore page.
+- **Collaborators with permission levels** — a project owner can add and remove collaborators,
+  each holding `read`, `write` or `admin`.
+- **Live editing** — `code_update` and `cursor_position` events broadcast to everyone in the
+  project room, so you see other people's edits and where their cursor is.
+- **Server-side authorization on every edit** — see below. This is the part worth reading.
+- **Syntax highlighting** — server-side via Pygments. The editing surface itself is a plain
+  `<textarea>` wired to Socket.IO, not a client-side editor component.
 
-## 🛠️ Technologies Used
+## How the live editing works, and what it does not do
 
-### Backend Architecture
-- **Python 3.8+**: Core programming language
-- **Flask**: Lightweight and scalable web framework
-- **Flask-SocketIO**: WebSocket support for real-time features
-- **SQLAlchemy**: Database ORM with advanced relationship modeling
-- **Flask-Login**: Secure user authentication and session management
+Every `code_update` is authorized before anything is written or broadcast
+(`app/sockets/events.py`):
 
-### Real-time Features
-- **Socket.IO**: Bidirectional event-based communication
-- **WebSocket Protocol**: Low-latency real-time data exchange
-- **Event-driven Architecture**: Scalable message handling
+```python
+if project.owner_id == current_user.id:
+    can_edit = True
+else:
+    for collab in project.collaborations:
+        if collab.user_id == current_user.id and collab.permission in ['write', 'admin']:
+            can_edit = True
+            break
+if not can_edit:
+    return
+```
 
-### Frontend Technologies
-- **HTML5/CSS3**: Modern semantic markup and styling
-- **Bootstrap**: Responsive UI components
-- **JavaScript (ES6+)**: Dynamic interactions and real-time updates
-- **CodeMirror**: Advanced code editor with syntax highlighting
-- **Pygments**: Server-side syntax highlighting
+A read-only collaborator can open the socket, join the room and emit an edit, and the server
+drops it. Authorization is not left to the client.
 
-### Database & Storage
-- **PostgreSQL**: Production database with ACID compliance
-- **SQLite**: Development database
-- **Redis**: Session storage and real-time event caching (optional)
+**The honest limit: this is last-write-wins on the whole document.** The handler assigns
+`project.content = content`, commits, and broadcasts. There is **no operational transform, no
+CRDT, no merge and no diff.** Two people typing in different parts of the same file at the same
+moment will have one of them overwrite the other. Real concurrent editing needs OT or a CRDT,
+and I did not implement one.
 
-### Development & Deployment
-- **Docker**: Containerized application deployment
-- **Docker Compose**: Multi-service orchestration
-- **Git**: Distributed version control system
+That is a genuine limitation and it is stated here rather than described as "conflict
+resolution", which is what an earlier version of this README claimed and the code never did.
+
+## 🛠 Tech Stack
+
+**Backend:** Python 3.8+, Flask, Flask-SocketIO, Flask-Login, SQLAlchemy
+**Frontend:** JavaScript, Socket.IO client, and a plain `<textarea>`. There is no editor
+library: no CodeMirror, no Ace, no Monaco. An earlier version of this README named CodeMirror,
+which was never in the dependency list or the templates.
+**Highlighting:** Pygments, server-side
+**Database:** SQLite by default, PostgreSQL under Docker Compose
+**Deployment:** Docker, Docker Compose
+
+## Data model
+
+| Model | Purpose |
+|---|---|
+| `User` | account, credentials, session identity |
+| `Project` | owner, name, language, and the document `content` itself |
+| `Collaboration` | join row between a user and a project, carrying the permission level |
+
+## Socket.IO events
+
+| Event | Direction | Purpose |
+|---|---|---|
+| `connect` / `disconnect` | client to server | session lifecycle |
+| `join` / `leave` | client to server | enter or exit a `project_<id>` room |
+| `code_update` | client to server | submit an edit; authorized, persisted, rebroadcast as `code_updated` |
+| `cursor_position` | client to server | share caret position with the room |
 
 ## Installation
 
 ### Prerequisites
 
-- Python 3.8+
-- pip (Python package manager)
-- Git
+- Python 3.8 or newer
+- pip
+- Docker and Docker Compose (optional)
 
-### Setup Without Docker
+### Without Docker
 
-1. Clone the repository
-2. Navigate to the project directory:
-   ```bash
-   cd CodeCollaborationHub
-   ```
+```bash
+git clone https://github.com/SeyiDan/code-collaboration-hub.git
+cd code-collaboration-hub
+python -m venv venv
+source venv/bin/activate        # venv\Scripts\activate on Windows
+pip install -r requirements.txt
+python run.py
+```
 
-3. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   ```
+Open http://localhost:5000.
 
-4. Activate the virtual environment:
-   - **Windows**: `venv\Scripts\activate`
-   - **macOS/Linux**: `source venv/bin/activate`
+### With Docker
 
-5. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-6. Run the application:
-   ```bash
-   python app.py
-   ```
-
-7. Access the application at http://localhost:8080
-
-### Setup With Docker
-
-1. Navigate to the project directory:
-   ```bash
-   cd CodeCollaborationHub
-   ```
-
-2. Build and run the containers:
-   ```bash
-   docker-compose up -d
-   ```
-
-3. Access the application at http://localhost:8080
+```bash
+docker-compose up --build
+```
 
 ## Project Structure
 
-```
-CodeCollaborationHub/
-├── app/                # Application package
-│   ├── models/         # Database models
-│   ├── routes/         # Route definitions
-│   ├── static/         # Static files (CSS, JS)
-│   ├── templates/      # HTML templates
-│   └── __init__.py     # Application initialization
-├── tests/              # Test suite
-├── app.py              # Application entry point
-├── requirements.txt    # Python dependencies
-├── Dockerfile          # Docker configuration
-├── docker-compose.yml  # Docker Compose configuration
-└── README.md           # Project documentation
-```
-
-## License
-
-This project is licensed under the MIT License.
-
-## ⚡ Real-time Features Deep Dive
-
-### Live Code Collaboration
-- **Multi-cursor Support**: See where other developers are typing in real-time
-- **Conflict Resolution**: Intelligent handling of simultaneous edits
-- **Live Syntax Highlighting**: Instant feedback for multiple programming languages
-- **Auto-save**: Never lose your work with automatic saving
-
-### Communication Tools
-- **Instant Messaging**: Built-in chat for project discussions
-- **Voice Annotations**: Audio comments on specific code sections
-- **Screen Sharing**: Share your screen during pair programming sessions
-- **Presence Indicators**: See who's online and working on what
-
-### Project Management
-- **Role-based Access**: Owner, Editor, Viewer permissions
-- **Project Templates**: Quick start with common project structures
-- **File Tree Navigation**: Intuitive project file organization
-- **History Tracking**: View all changes with timestamps and authors
-
-## 🔧 Advanced Configuration
-
-### Environment Variables
 ```bash
-FLASK_ENV=production
-DATABASE_URL=postgresql://user:pass@localhost/dbname
-REDIS_URL=redis://localhost:6379
-SECRET_KEY=your-secret-key
-SOCKETIO_ASYNC_MODE=threading
+├── app/
+│   ├── models/          # User, Project, Collaboration
+│   ├── routes/          # auth.py (register/login/logout), main.py (projects)
+│   └── sockets/         # events.py, the 6 Socket.IO handlers
+├── templates/           # Jinja2 views
+├── tests/
+│   └── test_models.py   # 6 model tests
+├── docker-compose.yml
+└── run.py
 ```
 
-### Docker Environment
-```yaml
-# docker-compose.yml configuration
-version: '3.8'
-services:
-  web:
-    build: .
-    ports:
-      - "8080:8080"
-    environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/codelab
-  db:
-    image: postgres:13
-    environment:
-      - POSTGRES_DB=codelab
-      - POSTGRES_PASSWORD=password
-```
+## Running Tests
 
-## 🚀 Future Enhancements
-
-- [ ] **AI Code Suggestions**: Integration with GitHub Copilot
-- [ ] **Code Review Tools**: Built-in pull request workflow
-- [ ] **Integrated Terminal**: Run code directly in the browser
-- [ ] **Plugin System**: Extensible architecture for custom tools
-- [ ] **Mobile App**: iOS/Android apps for code review on-the-go
-- [ ] **Integration APIs**: Connect with GitHub, GitLab, Bitbucket
-- [ ] **Performance Analytics**: Code quality metrics and insights
-- [ ] **Video Calling**: Built-in video conferencing for team meetings
-
-## 🤝 Contributing
-
-We welcome contributions from developers of all skill levels!
-
-### How to Contribute
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Write tests** for your new functionality
-4. **Make your changes** following our coding standards
-5. **Commit your changes**: `git commit -m 'Add amazing feature'`
-6. **Push to the branch**: `git push origin feature/amazing-feature`
-7. **Open a Pull Request** with a detailed description
-
-### Development Guidelines
-- Follow PEP 8 for Python code style
-- Write comprehensive tests for new features
-- Document your code with clear comments
-- Update the README for any new features
-- Test real-time functionality thoroughly
-
-### Running Tests
 ```bash
 python -m pytest tests/
-python -m pytest tests/test_socketio.py  # Real-time feature tests
 ```
 
-## 📊 Performance & Scalability
+Six tests, all covering the models. **This suite does not cover the socket handlers**, which is
+where the authorization logic lives, so the most important code in the project is currently the
+least tested. That is the first thing I would add.
 
-- **Concurrent Users**: Supports 100+ simultaneous collaborators
-- **Real-time Latency**: <50ms message delivery
-- **File Size Limits**: Up to 10MB per file, 100MB per project
-- **Scalability**: Horizontal scaling with Redis clustering
+## 🔒 Security notes
 
-## 🔒 Security Features
+- Passwords are hashed, never stored in plaintext.
+- Sessions are managed by Flask-Login, and every socket handler re-checks
+  `current_user.is_authenticated` rather than trusting the connection.
+- Edit authorization is enforced server-side, per project, on every `code_update`.
 
-- **CSRF Protection**: All forms are protected against cross-site attacks
-- **Session Security**: Secure session management with Flask-Login
-- **Input Validation**: Comprehensive input sanitization
-- **Rate Limiting**: API and WebSocket connection limits
-- **Audit Logging**: Track all user actions and changes
+**Not implemented**, and listed here so nobody assumes otherwise: CSRF tokens, rate limiting,
+audit logging. A previous version of this README claimed all three.
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
+MIT. See [LICENSE](LICENSE).
